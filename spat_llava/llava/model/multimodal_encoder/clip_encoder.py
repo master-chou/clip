@@ -2,12 +2,11 @@ import torch
 import torch.nn as nn
 
 from transformers import CLIPVisionModel, CLIPImageProcessor, CLIPVisionConfig
+import os
 import sys
-sys.path.append('/home/aiops/wangzh/llava-spat')
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../")))
+import spat_clip
 import pdb
-# pdb.set_trace()
-# from model import tmpmodel
-import alpha_clip_final as alpha_clip
 import torchvision.transforms as transforms
 depth_transform = transforms.Compose([
     transforms.Resize((336,336)),
@@ -39,7 +38,7 @@ class CLIPVisionTower(nn.Module):
         self.image_processor = CLIPImageProcessor.from_pretrained(self.vision_tower_name)
         # self.vision_tower = CLIPVisionModel.from_pretrained(self.vision_tower_name, device_map=device_map)
         # import pdb;pdb.set_trace()
-        self.vision_tower, _, self.depth_model = alpha_clip.load("ViT-L/14@336px", device='cuda', lora_adapt=False, rank=-1)
+        self.vision_tower, _, self.depth_model = spat_clip.load("ViT-L/14@336px", device='cuda', lora_adapt=False, rank=-1)
         # import pdb;pdb.set_trace()
         self.vision_tower.load_state_dict(torch.load("/home/aiops/wangzh/zss/AlphaCLIP/train/final-negative-large-wiseconv/ckpt/iter_10000.pth"),strict=False)
 
