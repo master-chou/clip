@@ -1,0 +1,17 @@
+accelerate
+bitsandbytes
+deepspeed
+einops
+flash-attn
+huggingface-hub
+loralib
+numpy
+pandas
+peft
+pillow
+scikit-learn
+scipy
+torch
+torchvision
+transformers
+wandb

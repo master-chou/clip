@@ -1,14 +1,11 @@
 import torch
-import alpha_clip_final as alpha_clip
 import os
 import sys
 import wandb
-# 获取上级目录的绝对路径
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# 将 'train' 目录添加到 sys.path 中
 sys.path.append(parent_dir)
 from dataset.mask_image_test import ScanRefer_Test,ScanRefer_Test2,ScanRefer_Testnr3d
-# import pdb;pdb.set_trace()
+import spat_clip
 from utils import concat_all_gather, is_dist_avail_and_initialized, accuracy
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,8 +13,6 @@ import torch.distributed as dist
 from tqdm import tqdm
 # from dataset.imagenet_s_test import Imagenet_S
 from dataset.mask_image_test import COCO_Masked_Test
-# from dataset.alpha_grit import Alpha_GRIT
-# from dataset.mask_image import ImageNet_Masked
 from torch.utils.data.distributed import DistributedSampler
 from scheduler import cosine_lr
 import argparse
@@ -33,6 +28,9 @@ from torch.utils.data import Dataset
 import json
 from dataset.mask_image_test import RGBD_Benchmark_Test
 from torchvision.datasets import CocoCaptions
+import torch
+from torch.utils.data import DataLoader
+import torchvision.transforms as transforms
 import clip
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 try:
@@ -66,7 +64,6 @@ class DepthSpatialDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        # 从 metadata 中获取图像和深度图文件名
         record = self.metadata[idx]
         img_name = record['image_id']
         gpt_caption = record.get('caption-gpt','')
@@ -86,10 +83,8 @@ class DepthSpatialDataset(Dataset):
         # image_path = os.path.join(self.root_dir, img_name + '.jpg')
         depth_path = f'/home/aiops/wangzh/data/full-depth-image/{record["image_id"]}'
         
-        # 初始化默认返回值
         image, depth = None, None
         
-        # 尝试加载图片
         try:
             image = Image.open(image_path).convert('RGB')
             if self.transform:
@@ -97,7 +92,6 @@ class DepthSpatialDataset(Dataset):
         except Exception as e:
             print(f"Warning: Failed to load image {image_path}. Error: {e}")
         
-        # 尝试加载深度图
         try:
             depth = Image.open(depth_path).convert('L')
             if self.depth_transform:
@@ -105,9 +99,8 @@ class DepthSpatialDataset(Dataset):
         except Exception as e:
             print(f"Warning: Failed to load depth image {depth_path}. Error: {e}")
         
-        # 如果图像或深度图加载失败，则跳过该数据点
         if image is None or depth is None:
-            return self.__getitem__((idx + 1) % len(self))  # 返回下一个有效的数据点
+            return self.__getitem__((idx + 1) % len(self))  
         
         return image, depth, posi_caption, neg_caption, meg_caption2
 
@@ -122,7 +115,6 @@ class CocoDataset(Dataset):
             img_info = self.coco.coco.loadImgs(self.coco.ids[i])[0]
             img_path = os.path.join(self.coco.root, img_info['file_name'])
             self.image_paths.append(img_path)
-        # import pdb;pdb.set_trace()
     def __len__(self):
         return len(self.coco)
 
@@ -135,10 +127,8 @@ class CocoDataset(Dataset):
         depth_map = Image.open(depth_map_path)
         if self.depth_transform:
             depth_map = self.depth_transform(depth_map)
-        captions = captions[:5]  # 取前5个caption
+        captions = captions[:5]  # 
         captions = clip.tokenize(captions)
-        # print(f"Image shape: {image.shape}, Depth shape: {depth_map.shape}, Captions: {captions.shape}")
-        # print(depth_map_path)
         return image, depth_map,captions
 
 
@@ -149,7 +139,6 @@ class DepthDataset(Dataset):
         self.transform = transform
         self.depth_transform = depth_transform
         
-        # 读取 JSONL 文件中的 metadata
         self.metadata = []
         jsonl_file = '/home/aiops/wangzh/data/metadata_new.jsonl'
         with open(jsonl_file, 'r') as f:
@@ -157,7 +146,6 @@ class DepthDataset(Dataset):
                 record = json.loads(line.strip())
                 self.metadata.append(record)
         
-        # 生成索引
         self.image_filenames = [record['image_id'] for record in self.metadata]
         
     def __len__(self):
@@ -167,18 +155,13 @@ class DepthDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        # 从 metadata 中获取图像和深度图文件名
         record = self.metadata[idx]
         img_name = record['image_id']
-        caption = record.get('caption', '')  # 使用 get() 方法防止键不存在导致的异常
+        caption = record.get('caption', '')  
         image_path=f'/dataset/SA-1B/data/sa_{record["image_id"][3:-8]:0>6}/{record["image_id"]}'
         # image_path = os.path.join(self.root_dir, img_name + '.jpg')
         depth_path = f'/home/aiops/wangzh/data/depth-image/{record["image_id"]}'
-        
-        # 初始化默认返回值
-        image, depth = None, None
-        
-        # 尝试加载图片
+        image, depth = None, None        
         try:
             image = Image.open(image_path).convert('RGB')
             if self.transform:
@@ -186,7 +169,6 @@ class DepthDataset(Dataset):
         except Exception as e:
             print(f"Warning: Failed to load image {image_path}. Error: {e}")
         
-        # 尝试加载深度图
         try:
             depth = Image.open(depth_path).convert('L')
             if self.depth_transform:
@@ -194,17 +176,11 @@ class DepthDataset(Dataset):
         except Exception as e:
             print(f"Warning: Failed to load depth image {depth_path}. Error: {e}")
         
-        # 如果图像或深度图加载失败，则跳过该数据点
         if image is None or depth is None:
-            return self.__getitem__((idx + 1) % len(self))  # 返回下一个有效的数据点
+            return self.__getitem__((idx + 1) % len(self))  # 
         
         return image, depth, caption
 
-import torch
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-
-# 定义图像和深度图的变换
 def _convert_image_to_rgb(image):
     return image.convert("RGB")
 
@@ -224,7 +200,7 @@ def zeroshot_classifier_ours(captions, model, local_rank=0):
     with torch.no_grad():
         zeroshot_weights = []
         for caption in tqdm(captions, disable=(dist.get_rank() != 0)):
-            texts = alpha_clip.tokenize(caption).cuda() #tokenize
+            texts = clip.tokenize(caption).cuda() #tokenize
             class_embeddings = model.encode_text(texts) #embed with text encoder
             class_embeddings /= class_embeddings.norm(dim=-1, keepdim=True)
             # class_embedding = class_embeddings.mean(dim=0)
@@ -239,7 +215,7 @@ def zeroshot_classifier(classnames, templates, model, local_rank=0):
         zeroshot_weights = []
         for classname in tqdm(classnames, disable=(dist.get_rank() != 0)):
             texts = [template.format(classname) for template in templates] #format with class
-            texts = alpha_clip.tokenize(texts).cuda() #tokenize
+            texts = clip.tokenize(texts).cuda() #tokenize
             class_embeddings = model.encode_text(texts) #embed with text encoder
             class_embeddings /= class_embeddings.norm(dim=-1, keepdim=True)
             class_embedding = class_embeddings.mean(dim=0)
@@ -253,12 +229,12 @@ class CLIP_Clean_Train():
         self.local_rank = local_rank
         self.pos_embed=pos_embed
         if lora_rank == -1:
-            self.model, _ = alpha_clip.load("ViT-L/14@336px", device='cpu', lora_adapt=False, rank=-1)
-            # self.model, _ = alpha_clip.load("ViT-L/14", device='cpu', lora_adapt=False, rank=-1)
-            # self.model, _ = alpha_clip.load("ViT-B/16", device='cpu', lora_adapt=False, rank=-1)
+            self.model, _ = spat_clip.load("ViT-L/14@336px", device='cpu', lora_adapt=False, rank=-1)
+            # self.model, _ = spat_clip.load("ViT-L/14", device='cpu', lora_adapt=False, rank=-1)
+            # self.model, _ = spat_clip.load("ViT-B/16", device='cpu', lora_adapt=False, rank=-1)
         else:
-            # self.model, _ = alpha_clip.load("ViT-L/14", device='cpu', lora_adapt=True, rank=lora_rank)
-            self.model, _ = alpha_clip.load("ViT-B/16", device='cpu', lora_adapt=True, rank=lora_rank)
+            # self.model, _ = spat_clip.load("ViT-L/14", device='cpu', lora_adapt=True, rank=lora_rank)
+            self.model, _ = spat_clip.load("ViT-B/16", device='cpu', lora_adapt=True, rank=lora_rank)
         torch.cuda.set_device(device=f'cuda:{local_rank}')
         self.model = self.model.float().cuda()
         self.batch_size = 32
@@ -286,11 +262,6 @@ class CLIP_Clean_Train():
                     v.requires_grad_(True)
                     conv_opt_paras.append(v)
         else: # normal to not use lora
-            # for k, v in self.model.named_parameters():
-            #     # v.requires_grad_(False)
-            #     v.requires_grad_(True)
-            # for k, v in self.model.named_parameters():
-            #     v.requires_grad_(False)
             for k, v in self.model.named_parameters():
             # for k, v in self.model.named_parameters():
                 v.requires_grad_(True)
@@ -304,14 +275,10 @@ class CLIP_Clean_Train():
                 {"params": other_opt_paras, "lr": self.lr * para_gamma}
             ],
         )
-        # import pdb;pdb.set_trace()
         self.para_gamma = para_gamma
         
         self.scaler = torch.cuda.amp.grad_scaler.GradScaler()
-        # self.model.visual.requires_grad_(True)
-
         self.print_trainable_params()
-        # import pdb;pdb.set_trace()
 
     def print_trainable_params(self):
         print("Trainable parameters:")
@@ -327,13 +294,11 @@ class CLIP_Clean_Train():
         text_features = self.model.encode_text(posi_texts)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
         
-        # 提取负样本特征
         negative_text_features = self.model.encode_text(neg_texts)
         negative_text_features = negative_text_features / negative_text_features.norm(dim=-1, keepdim=True)
         negative_text_features2 = self.model.encode_text(neg_texts2)
         negative_text_features2 = negative_text_features2 / negative_text_features2.norm(dim=-1, keepdim=True)
         negative_text_features = torch.cat((negative_text_features,negative_text_features2),dim=0)
-        # import pdb;pdb.set_trace()
         # negative_text_features = toch.diag(negative_text_features)
 
         image_feat_all = concat_all_gather(image_features)
@@ -347,7 +312,6 @@ class CLIP_Clean_Train():
         sim_i2t_with_neg = torch.matmul(image_features, text_feat_all_with_neg.T)
 
 
-        # #负样本的相似度
         # sim_neg_i2t = torch.matmul(image_features, negative_feat_all.T)
         # sim_neg_t2i = torch.matmul(image_feat_all, negative_text_features.T)
         # sim_neg_t2i = sim_neg_t2i.T
@@ -377,8 +341,6 @@ class CLIP_Clean_Train():
         running_loss = 0.0
         num_batches_per_epoch = len(dataloader)
         for i, (images, masks, posi_texts,neg_texts,neg_texts2) in enumerate(tqdm(dataloader, disable=(dist.get_rank() != 0))):
-            # import pdb;pdb.set_trace()
-            # print(texts)
             step = num_batches_per_epoch * epoch + i
             if step < start_iter:
                 continue
@@ -386,15 +348,13 @@ class CLIP_Clean_Train():
             self.scheduler(step)
             images = images.cuda()
             masks = masks.cuda()
-            # import pdb;pdb.set_trace()
-            posi_texts = alpha_clip.tokenize(posi_texts).cuda()
-            neg_texts = alpha_clip.tokenize(neg_texts).cuda()
-            neg_texts2 = alpha_clip.tokenize(neg_texts2).cuda()
+            posi_texts = clip.tokenize(posi_texts).cuda()
+            neg_texts = clip.tokenize(neg_texts).cuda()
+            neg_texts2 = clip.tokenize(neg_texts2).cuda()
             if amp:
                 with torch.cuda.amp.autocast():
                     loss = self.inference(images, masks, posi_texts,neg_texts,neg_texts2)
                     
-                # import pdb;pdb.set_trace()
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -402,7 +362,6 @@ class CLIP_Clean_Train():
                 loss = self.inference(images, masks, posi_texts,neg_texts,neg_texts2)
                 loss.backward()
                 self.optimizer.step()
-            # import pdb;pdb.set_trace()
             running_loss += loss.item()
             batch_num = i + 1
         
@@ -428,53 +387,52 @@ class CLIP_Clean_Train():
                     print("=====================================")
 
                     if step % 5000 == 0 and step != 0 :
-                        # import pdb;pdb.set_trace()
                         torch.save(self.model.state_dict(), self.ckptdir + f'iter_{step}.pth')
                         # torch.save(self.model.state_dict(), self.ckptdir + f'iter_{step}.pth')
                     
-                # with torch.no_grad():
-                #     self.model.visual.eval()
-                #     for test_name, test_loader in test_loaders.items():
-                        # self.text_embeddings = zeroshot_classifier(test_loader.dataset.classes, simple_templates, self.model, self.local_rank)
-                        # if test_name == 'OURS':
-                        #     self.text_embeddings = zeroshot_classifier_ours(test_loader.dataset.captions, self.model, self.local_rank)
-                        #     acc1 = self.test_epoch_ours(test_loader)
-                        #     print("=====================================")
-                        #     print(f"RGBD-bench test mean of per class acc-1 step 0: {acc1}")
-                        #     print("=====================================")
+                with torch.no_grad():
+                    self.model.visual.eval()
+                    for test_name, test_loader in test_loaders.items():
+                        self.text_embeddings = zeroshot_classifier(test_loader.dataset.classes, simple_templates, self.model, self.local_rank)
+                        if test_name == 'OURS':
+                            self.text_embeddings = zeroshot_classifier_ours(test_loader.dataset.captions, self.model, self.local_rank)
+                            acc1 = self.test_epoch_ours(test_loader)
+                            print("=====================================")
+                            print(f"RGBD-bench test mean of per class acc-1 step 0: {acc1}")
+                            print("=====================================")
                             
-                        #     wandb.log({
-                        #         f"{test_name}_RGBD-bench": acc1,
-                        #         "step": step
-                        #     })
-                            # acc1=self.test_epoch_scannet()
-                            # print("=====================================")
-                            # print(f"Scannet test mean of per class acc step 0: {acc1}")
-                            # print("=====================================")
+                            wandb.log({
+                                f"{test_name}_RGBD-bench": acc1,
+                                "step": step
+                            })
+                            acc1=self.test_epoch_scannet()
+                            print("=====================================")
+                            print(f"Scannet test mean of per class acc step 0: {acc1}")
+                            print("=====================================")
                             
-                            # wandb.log({
-                            #     f"{test_name}_Scannet": acc1,
-                            #     "step": step
-                            # })
+                            wandb.log({
+                                f"{test_name}_Scannet": acc1,
+                                "step": step
+                            })
                             
-                        # if test_name == 'COCO':
-                        #     # self.text_embeddings = zeroshot_classifier(test_loader.dataset.classes, simple_templates, self.model, self.local_rank)
-                        #     i2t_accuracies, t2i_accuracies = self.test_epoch_retrieval(test_loader)
-                        #     print("=====================================")
-                        #     print(f"CoCo test i2t_accuracies: {i2t_accuracies}")
-                        #     print(f"CoCo test t2i_accuracies: {t2i_accuracies}")
-                        #     print("=====================================")
+                        if test_name == 'COCO':
+                            # self.text_embeddings = zeroshot_classifier(test_loader.dataset.classes, simple_templates, self.model, self.local_rank)
+                            i2t_accuracies, t2i_accuracies = self.test_epoch_retrieval(test_loader)
+                            print("=====================================")
+                            print(f"CoCo test i2t_accuracies: {i2t_accuracies}")
+                            print(f"CoCo test t2i_accuracies: {t2i_accuracies}")
+                            print("=====================================")
                             
-                        #     wandb.log({
-                        #         f"{test_name}_Coco_i2t_acc1": i2t_accuracies[0],
-                        #         f"{test_name}_Coco_i2t_acc5": i2t_accuracies[1],
-                        #         f"{test_name}_Coco_t2i_acc1": t2i_accuracies[0],
-                        #         f"{test_name}_Coco_t2i_acc5": t2i_accuracies[1],
-                        #         "step": step
-                        #     })
+                            wandb.log({
+                                f"{test_name}_Coco_i2t_acc1": i2t_accuracies[0],
+                                f"{test_name}_Coco_i2t_acc5": i2t_accuracies[1],
+                                f"{test_name}_Coco_t2i_acc1": t2i_accuracies[0],
+                                f"{test_name}_Coco_t2i_acc5": t2i_accuracies[1],
+                                "step": step
+                            })
                         
                             
-                    # self.model.visual.train()
+                    self.model.visual.train()
         return running_loss / batch_num
 
     @torch.no_grad()
@@ -486,14 +444,10 @@ class CLIP_Clean_Train():
             for images, depth,captions_batch in dataloader:
                 images = images.to('cuda')
                 image_features.append(self.model.visual(images,depth,pos_embed=self.pos_embed))
-                # captions_batch = list(map(list, zip(*captions_batch)))
-                # import pdb;pdb.set_trace()
                 for captions in captions_batch:
-                    # caption_input = alpha_clip.tokenize(captions).cuda()
                     caption_input=captions.cuda()
                     text_features.append(self.model.encode_text(caption_input))
             
-            # import pdb;pdb.set_trace()
             image_features = torch.cat(image_features) #[5000,512]
             image_features /= image_features.norm(dim=-1, keepdim=True)
 
@@ -502,7 +456,6 @@ class CLIP_Clean_Train():
             text_features /= text_features.norm(dim=-1, keepdim=True)
 
             similarity = image_features @ text_features.T
-            # I2T (Image to Text) 检索
             i2t_accuracies = []
             for k in [1, 5, 10]:
                 pred_true = 0
@@ -517,7 +470,6 @@ class CLIP_Clean_Train():
                 i2t_accuracies.append(pred_true / 5000)
                 print("acc",pred_true / 5000)
 
-            # T2I (Text to Image) 检索
             t2i_accuracies = []
             similarity = similarity.T
             for k in [1, 5, 10]:
@@ -646,18 +598,6 @@ class CLIP_Clean_Train():
         return corr_pred / total_num
 
     def train(self, common_pair=False, resume=False, amp=False, warmup_length=200):
-        # testset_image_s = Imagenet_S(hi_res=True)
-        # testset_image_s_all_one = Imagenet_S(hi_res=True, all_one=True)
-        # testset_coco = COCO_Masked_Test(hi_res=True)
-        # trainset = Alpha_GRIT(common_pair=common_pair)
-        # trainset = Alpha_GRIT(ids_file='grit_1m_ids.pkl', root_pth='grit-1m/', common_pair=common_pair, subnum=self.subnum, hi_res=True)
-        # trainset = torch.utils.data.ConcatDataset(datasets=[trainset, ImageNet_Masked()])
-        # test_loaders = dict()
-        # for name, testset in zip(['COCO', 'Imagenet-S', 'Imagenet-S_all_one'], [testset_coco, testset_image_s, testset_image_s_all_one]):
-        #     test_sampler = DistributedSampler(dataset=testset, shuffle=True)
-        #     test_loader = torch.utils.data.DataLoader(testset, batch_size=self.batch_size, sampler=test_sampler, num_workers=16, pin_memory=True)
-        #     test_loaders[name] = test_loader   
-        # os.environ['WANDB_MODE'] = 'offline'
         test_loaders=dict()
         testset_ours = RGBD_Benchmark_Test('/home/aiops/wangzh/data/clip-depth/RGBD-benchmark')
         coco_dataset = CocoDataset(root="/home/aiops/wangzh/data/val2017", annFile="/home/aiops/wangzh/data/captions_val2017.json", transform=clip_transform,depth_transform=depth_transform)
@@ -687,7 +627,6 @@ class CLIP_Clean_Train():
             print(f"load resumed checkpoint: {resume_pth}")  
             wandb.log({"info": f"load resumed checkpoint: {resume_pth}"})
         
-        # import pdb;pdb.set_trace()
         for epoch in range(start_epoch, self.num_epoch):
             # train
             loss = self.train_epoch(train_loader, test_loaders, epoch, start_iter=resume_iter, amp=amp)

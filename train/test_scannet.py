@@ -6,9 +6,8 @@ sys.path.append(parent_dir)
 from dataset.mask_image_test import ScanRefer_Test,ScanRefer_Test2,ScanRefer_Testnr3d
 from PIL import Image
 import requests
-import alpha_clip_test as alpha_clip
 from dataset.mask_image_test import RGBD_Benchmark_Test,RGBD_Benchmark_Test2,RGBD_Outdoor_Benchmark
-
+import spat_clip
 from transformers import AutoProcessor, AutoModel
 import torch
 from torch.utils.data import Dataset
@@ -75,7 +74,7 @@ class ScanRefer_Test(Dataset):
         #     depth = self.depth_transform(depth)
         
         caption = self.dataset.anns[img_ids]
-        # texts = alpha_clip.tokenize(caption).cuda()
+        # texts = spat_clip.tokenize(caption).cuda()
         # text_embeddings = self.model.encode_text(texts)
         # text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
         
