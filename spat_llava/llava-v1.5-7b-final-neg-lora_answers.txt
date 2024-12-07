@@ -1,0 +1,600 @@
+A
+(B) books
+(A) table
+(B) door
+(B) lamp
+A
+(B) chair
+A
+A
+(B) books
+B
+B
+A
+A
+(B) television
+B
+(A) pillow
+A
+A
+A
+B
+A
+A
+(A) lamp
+B
+A
+A
+A
+A
+(B) lamp
+A
+A
+(B) television
+B
+A
+A
+A
+(B) table
+(B) television
+B
+(B) table
+A
+(B) books
+A
+A
+A
+B
+A
+(B) desk
+A
+A
+(A) floor mat
+(B) lamp
+(A) books
+(A) lamp
+(B) blinds
+(B) television
+A
+B
+A
+(B) chair
+A
+A
+A
+(B) lamp
+A
+B
+A
+A
+A
+(B) lamp
+B
+(A) blinds
+A
+(A) lamp
+A
+A
+B
+A
+(B) books
+A
+A
+A
+B
+(B) television
+(B) books
+A
+A
+(B) books
+A
+(B) television
+B
+A
+(A) table
+(B) chair
+A
+A
+B
+A
+(B) desk
+(A) books
+A
+B
+A
+A
+A
+A
+B
+A
+B
+(B) table
+A
+(B) chair
+(B) television
+A
+A
+(B) television
+A
+A
+A
+A
+(B) desk
+A
+(B) shelves
+A
+(B) chair
+(B) books
+(B) lamp
+A
+(A) door
+(B) chair
+(B) desk
+A
+B
+(B) table
+A
+B
+A
+A
+(A) door
+(B) television
+(B) pillow
+(B) chair
+A
+A
+B
+A
+A
+A
+A
+A
+A
+A
+(B) chair
+A
+(B) books
+A
+A
+B
+(B) desk
+(B) television
+A
+(B) television
+A
+(B) lamp
+(A) chair
+A
+A
+A
+A
+B
+B
+A
+(B) desk
+(B) television
+(B) books
+A
+(B) books
+A
+(B) books
+A
+B
+A
+A
+A
+(B) chair
+(A) books
+(A) books
+B
+A
+A
+A
+(B) table
+(A) shelves
+A
+A
+(B) books
+A
+(A) books
+A
+A
+(B) television
+A
+A
+B
+B
+A
+A
+(B) lamp
+A
+A
+A
+(B) box
+(B) monitor
+A
+A
+B
+A
+B
+(B) stationery
+B
+(B) door
+A
+(A) chair
+B
+B
+A
+A
+(B) chair
+A
+(B) books
+A
+(B) chair
+A
+A
+A
+A
+A
+(B) bottle
+(B) chair
+A
+(B) phone
+(B) box
+A
+(B) chair
+A
+A
+A
+B
+B
+A
+A
+A
+A
+(B) chair
+A
+(A) chair
+B
+(B) table
+A
+A
+A
+(B) desk
+A
+A
+A
+(B) table
+B
+A
+A
+A
+A
+B
+B
+(B) pillow
+A
+(B) chair
+A
+(B) fire extinguisher
+A
+A
+B
+(B) sofa
+A
+B
+B
+A
+(B) picture
+B
+B
+A
+A
+A
+A
+B
+A
+A
+(A) chair
+(B) table
+A
+A
+B
+A
+(A) table
+(B) lamp
+A
+(B) books
+(B) computer
+B
+A
+A
+A
+(B) bin
+A
+A
+B
+B
+A
+A
+A
+B
+A
+(B) night stand
+(B) potted plant
+A
+A
+(B) pillow
+A
+(A) books
+B
+B
+A
+A
+B
+B
+B
+A
+(B) desk
+(B) chair
+B
+A
+B
+A
+B
+A
+(A) tray
+A
+(B) television
+A
+(B) microwave
+A
+(A) chair
+A
+A
+A
+A
+A
+A
+A
+A
+(B) bin
+A
+B
+A
+A
+A
+A
+(B) chair
+A
+A
+A
+B
+A
+A
+B
+A
+A
+A
+(B) television
+A
+A
+B
+A
+(A) chair
+A
+A
+(B) lamp
+(B) night stand
+A
+(B) chair
+B
+A
+A
+(B) stationery
+B
+(A) lamp
+A
+B
+(B) table
+A
+A
+(B) motorcycle
+A
+(B) pedestrian
+A
+A
+B
+(B) motorcycle
+(B) pedestrian
+(B) car
+A
+B
+B
+A
+A
+A
+(B) pedestrian
+A
+(A) pedestrian
+B
+B
+(A) car
+A
+A
+B
+(B) trailer
+A
+(A) car
+A
+A
+A
+(B) traffic cone
+B
+A
+(B) car
+A
+A
+(B) barrier
+(B) pedestrian
+A
+A
+A
+A
+(B) car
+A
+B
+(A) traffic cone
+B
+A
+(B) pedestrian
+A
+(A) pedestrian
+B
+A
+A
+(B) pedestrian
+A
+A
+A
+A
+B
+(B) pedestrian
+A
+A
+B
+(B) car
+A
+(A) motorcycle
+(A) car
+A
+A
+B
+A
+A
+A
+(B) pedestrian
+A
+A
+(B) pedestrian
+A
+B
+A
+A
+A
+A
+A
+(B) traffic cone
+A
+B
+B
+A
+A
+A
+A
+A
+(B) traffic cone
+B
+A
+A
+B
+A
+A
+A
+B
+A
+A
+B
+A
+(B) barrier
+(A) bus
+A
+A
+(B) truck
+(B) car
+(B) bicycle
+A
+A
+B
+A
+A
+A
+B
+B
+(A) pedestrian
+A
+A
+A
+(B) pedestrian
+A
+(B) pedestrian
+A
+B
+B
+(A) bicycle
+A
+A
+A
+B
+A
+A
+B
+(B) car
+B
+(A) truck
+B
+A
+B
+(B) car
+A
+A
+A
+A
+B
+B
+A
+(B) car
+(B) traffic cone
+A
+A
+(A) traffic cone
+A
+A
+A
+(A) barrier
+A
+A
+A
+A
+(B) car
+(B) motorcycle
+A
+A
+A
+A
+(A) truck
+(A) truck
+A
+B
+(A) truck
+A
+(B) barrier
+B
+A
+(B) motorcycle
+(B) car
+A
+(B) pedestrian
+(B) car
+A
+A
+(B) car
+B
+A
+(B) pedestrian
+B
+B
+A
+A
+(A) traffic cone
+(A) pedestrian
