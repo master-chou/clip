@@ -24,17 +24,13 @@ class CPEconv(nn.Module):
         self.register_buffer('target_tensor_template', torch.zeros(1, in_channels, self.spatial_shape, 1, 1))
 
     def generate_3d_coords_from_depth(self, depth_maps):
-        # 假设 depth_maps 形状为 (B, H, W)
         B, H, W = depth_maps.shape
         z_min = depth_maps.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0]  # (B, 1, 1)
         z_max = depth_maps.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]  # (B, 1, 1)
         z = (depth_maps - z_min) / (z_max - z_min + 1e-8)
-        # z = depth_maps  # z 坐标为深度值，形状为 (B, H, W)
-
         return z
 
     def forward(self, features, depth):
-        #features [197,256,768] depth [256,14,14]
         B,h,w=depth.shape
         _,_,C=features.shape
         D = self.spatial_shape
@@ -47,27 +43,12 @@ class CPEconv(nn.Module):
             coord.clamp(0, bnd)  # clamp into bnd
            )
         target_tensor = self.target_tensor_template.expand(B, C, D, h, w).clone()
-        # target_tensor = torch.zeros(B, C, D, h, w).to(device=features.device)
-        # return 0
-
         coord = coord.unsqueeze(1).expand(-1, C, -1, -1)  # [B, C, H, W]
-        # reshape features 以便与 coord 进行操作
         features = features.view(B, h, w, C)  # [B, H, W, C]
         features = features.permute(0, 3, 1, 2)  # [B, C, H, W]
         features = features.unsqueeze(2).to(dtype=target_tensor.dtype)
         coord = coord.unsqueeze(2)
-        # import pdb;pdb.set_trace()
-
-        # scatter features into target_tensor
         target_tensor = target_tensor.scatter_(2, coord, features)
-        # 2. 使用 b 的值作为下标，将 features 的值复制到目标张量的相应位置
-        # 3. 使用 for 循环将 features 的值复制到目标张量
-        # for i in range(B):
-        #     for j in range(h):
-        #         for k in range(w):
-        #             # 获取在 features 中的索引
-        #             index = coord[i, j, k]  # 从 b 中获取索引
-        #             target_tensor[i, :,index, j, k] = features[i, j * 14 + k, :]  # 复制对应的 features 值
         output = self.conv3d(target_tensor).mean(dim=2) #(B,768,14,14)
         output = output.reshape(-1,output.size(0),output.size(1))
         cls_feat = torch.zeros(1,output.size(-2), output.size(-1)).to(device=output.device,dtype=output.dtype)
@@ -84,40 +65,23 @@ class RPE(torch.nn.Module):
         # torch.nn.init.trunc_normal_(self.rpe_table, std=0.02)
 
     def generate_3d_coords_from_depth(self,depth_maps):
-        # 假设 depth_maps 形状为 (B, H, W)
         B, H, W = depth_maps.shape
-
-        # 生成网格 i, j，形状为 (H, W)
         i, j = torch.meshgrid(torch.arange(H, device=depth_maps.device), torch.arange(W, device=depth_maps.device), indexing='ij')
-
-        # 归一化 x 和 y 坐标
         x = j.float() / (W - 1)  # (H, W)
         y = i.float() / (H - 1)  # (H, W)
-
-        # 将 x 和 y 扩展到 (B, H, W) 以匹配 depth_maps
         x = x.unsqueeze(0).expand(B, -1, -1)  # (B, H, W)
         y = y.unsqueeze(0).expand(B, -1, -1)  # (B, H, W)
         
         z_min = depth_maps.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0]  # (B, 1, 1)
         z_max = depth_maps.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]  # (B, 1, 1)
         z = (depth_maps - z_min) / (z_max - z_min + 1e-8)
-        # z = depth_maps  # z 坐标为深度值，形状为 (B, H, W)
-
-        # 组合成 (B, H, W, 3) 的三维坐标
         coords = torch.stack([x, y, z], dim=-1)  # (B, H, W, 3)
 
         return coords
 
 
     def compute_relative_positions(self,absolute_coords):
-        """
-        计算相对位置编码
-        参数:
-        absolute_coords: 形状为 (N, 3) 的绝对三维坐标张量
-        返回:
-        相对位置编码，形状为 (N, N, 3)
-        """
-        # 确保输入是一个张量
+
         if not isinstance(absolute_coords, torch.Tensor):
             raise ValueError("Input must be a PyTorch tensor.")
         N = absolute_coords.shape[1]
@@ -127,17 +91,10 @@ class RPE(torch.nn.Module):
 
 
     def forward(self,depth):
-        # B,K,K,3
-        # import pdb;pdb.set_trace()
 
         depth=self.generate_3d_coords_from_depth(depth).squeeze(0)
         depth=depth.reshape(depth.size(0),-1,depth.size(-1))
-        # zeros_tensor = torch.zeros(depth.size(0), 1, depth.size(-1))
-        # depth = torch.cat((zeros_tensor,depth), dim=1)
         coord=self.compute_relative_positions(depth)
-        # 将 coord 从 [0, 1] 范围转换为 [0, width] 或 [0, height]
-        # coord = coord.reshape(coord.size(0),-1,coord.size(-1))
-        # import pdb;pdb.set_trace()
         coord = (coord * torch.tensor([self.pos_bnd, self.pos_bnd, self.pos_bnd], device=coord.device)).round().long()
         idx = (
             coord.clamp(-self.pos_bnd, self.pos_bnd)  # clamp into bnd
@@ -149,8 +106,6 @@ class RPE(torch.nn.Module):
         out = out.view(idx.shape + (-1,)).sum(3)
 
         out = out.permute(0, 3, 1, 2)  # (N, K, K, H) -> (N, H, K, K)
-        # out_new=torch.zeros(out.size(0),out.size(1),out.size(2)+1,out.size(3)+1)
-        # out_new[:, :, 1:, 1:] = out
         return out
 
 class PositionEmbeddingCoordsSine(nn.Module):
@@ -178,7 +133,6 @@ class PositionEmbeddingCoordsSine(nn.Module):
         if pos_type == "fourier":
             assert d_pos is not None
             assert d_pos % 2 == 0
-            # define a gaussian matrix input_ch -> output_ch
             B = torch.empty((d_in, d_pos // 2)).normal_()
             B *= gauss_scale
             # self.gauss_B = nn.Parameter(B)  
@@ -234,11 +188,9 @@ class PositionEmbeddingCoordsSine(nn.Module):
         assert num_channels > 0 and num_channels % 2 == 0
         d_in, max_d_out = self.gauss_B.shape[0], self.gauss_B.shape[1]
         d_out = num_channels // 2
-        # assert d_out <= max_d_out
         assert d_in == xyz.shape[-1]
 
         # clone coords so that shift/scale operations do not affect original tensor
-        # import pdb;pdb.set_trace()
         ncoords = xyz.shape[1]
         if self.normalize:
             # xyz = shift_scale_points(xyz, src_range=input_range)
@@ -281,30 +233,20 @@ class PositionEmbeddingCoordsSine(nn.Module):
         # cam_coords_tensor = torch.tensor(cam_coords, dtype=torch.float16)  # (B, H, W, 3)
         cam_coords_tensor = cam_coords_tensor.view(cam_coords_tensor.size(0), -1, 3)  # (B, H*W, 3)
         x=cam_coords_tensor
-        x = x.permute(0, 2, 1)  # (B, H*W, 3) -> (B, 3, H*W)
-        x = self.trans3d(x)      # 1D卷积映射 (B, 768, H*W)
-        x = x.permute(0, 2, 1)   # 转换回 (B, H*W, 768)
+        x = x.permute(0, 2, 1)  
+        x = self.trans3d(x)     
+        x = x.permute(0, 2, 1)  
         return x
     def generate_3d_coords_from_depth(self, depth_maps):
-        # 假设 depth_maps 形状为 (B, H, W)
         B, H, W = depth_maps.shape
-
-        # 生成网格 i, j，形状为 (H, W)
         i, j = torch.meshgrid(torch.arange(H, device=depth_maps.device), torch.arange(W, device=depth_maps.device), indexing='ij')
-
-        # 归一化 x 和 y 坐标
         x = j.float() / (W - 1)  # (H, W)
         y = i.float() / (H - 1)  # (H, W)
-
-        # 将 x 和 y 扩展到 (B, H, W) 以匹配 depth_maps
         x = x.unsqueeze(0).expand(B, -1, -1)  # (B, H, W)
         y = y.unsqueeze(0).expand(B, -1, -1)  # (B, H, W)
         
-        z = depth_maps  # z 坐标为深度值，形状为 (B, H, W)
-
-        # 组合成 (B, H, W, 3) 的三维坐标
-        coords = torch.stack([x, y, z], dim=-1)  # (B, H, W, 3)
-
+        z = depth_maps  
+        coords = torch.stack([x, y, z], dim=-1)  
         return coords
 
 
@@ -492,11 +434,9 @@ class Attention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
         self.logit_scale_max = logit_scale_max
-        self.use_rel_pos = True  # 保存相对位置编码的使用状态
+        self.use_rel_pos = True  
         self.rpe = RPE(patch_num=patch_num,num_heads=self.num_heads)
         self.rpe.requires_grad=True
-        # import pdb;pdb.set_trace()
-        # keeping in_proj in this form (instead of nn.Linear) to match weight scheme of original
         if lora_adapt:
             print("!!!!!!!!!!using lora for qkv projection!!!!!!!!!!")
             self.in_proj = lora.MergedLinear(dim, 3*dim, r=rank, enable_lora=[True, False, True])
@@ -540,7 +480,6 @@ class Attention(nn.Module):
             depth=depth.squeeze(1)
             res= self.rpe(depth)
             res=res.reshape(-1,res.size(-2),res.size(-1))
-            # import pdb;pdb.set_trace()
             attn[:,1:,1:]=attn[:,1:,1:]+res
 
         if attn_mask is not None:
@@ -586,15 +525,7 @@ class CustomResidualAttentionBlock(nn.Module):
 
 
     def forward(self, x: torch.Tensor, return_attn=False,depth=None):
-        # import pdb;pdb.set_trace()
-        # x ([577, 50, 1024])
-        # if None:
         shortcut=x
-        # import pdb;pdb.set_trace()
-        # shapes=x.shape
-        # x=  x.reshape(-1,x.size(-1))
-        # import pdb;pdb.set_trace()
-        # cposi = self.cpe(x, depth).reshape(shapes)
         cposi = self.cpe(self.ln_cpe(x), depth)
         x =shortcut+cposi
 
@@ -647,7 +578,6 @@ class CustomTransformer(nn.Module):
         self.resblocks = nn.Sequential(*[CustomResidualAttentionBlock(width, heads, attn_mask, lora_adapt=lora_adapt, rank=rank,patch_num=patch_num) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor, return_attn=False,depth=None):
-        # import pdb;pdb.set_trace()
         if return_attn:
             for i, block in enumerate(self.resblocks):
                 if i == len(self.resblocks) - 1:
@@ -656,12 +586,9 @@ class CustomTransformer(nn.Module):
                     x = block(x,depth=depth)
             assert False    
         for block in self.resblocks:
-            # import pdb;pdb.set_trace()
-            x = block(x, depth=depth)  # 将 depth 传递给每个模块
+            x = block(x, depth=depth)  
         return x
-        # return self.resblocks(x)
 
-# ////////////////////////////////////////////////////////////////////////////////////////////
 class VisionTransformer(nn.Module):
     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int, lora_adapt=False, rank=16):
         super().__init__()
@@ -673,28 +600,12 @@ class VisionTransformer(nn.Module):
         scale = width ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
-        # self.depth_positional_embedding = nn.Parameter(scale * torch.zeros((input_resolution // patch_size) ** 2, width))  # 用于alpha的深度编码
+        # self.depth_positional_embedding = nn.Parameter(scale * torch.zeros((input_resolution // patch_size) ** 2, width))  
         # self.depth_positional_embedding = PositionEmbeddingCoordsSine(temperature=10000,
         #             normalize=True,
         #             scale=2 * torch.pi,
         #             pos_type="fourier",
-        #             d_pos=768,  # 示例输出维度
-        #             d_in=3,
-        #             gauss_scale=1.0
-        #         )
-        # self.sine_positional_embedding = PositionEmbeddingCoordsSine(temperature=10000,
-        #             normalize=True,
-        #             scale=2 * torch.pi,
-        #             pos_type="sine",
-        #             d_pos=768,  # 示例输出维度
-        #             d_in=3,
-        #             gauss_scale=1.0
-        #         )
-        # self.large_positional_embedding = PositionEmbeddingCoordsSine(temperature=10000,
-        #             normalize=True,
-        #             scale=2 * torch.pi,
-        #             pos_type="sine",
-        #             d_pos=1024,  # 示例输出维度
+        #             d_pos=768,  
         #             d_in=3,
         #             gauss_scale=1.0
         #         )
@@ -711,17 +622,8 @@ class VisionTransformer(nn.Module):
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
     def forward(self, x: torch.Tensor, alpha=None, return_attn=False,pos_embed=None):
-        # import pdb;pdb.set_trace()
-        x = self.conv1(x)  # shape = [*, width, grid, grid]
-        # ASSUME alpha is always not None!
-        # import pdb;pdb.set_trace()
-        # if pos_embed == "nodepth":
-        #     pass
-        # else:
-        #     x = x + self.conv1_alpha(alpha)
-        # import pdb;pdb.set_trace()
-
-        x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+        x = self.conv1(x)  
+        x = x.reshape(x.shape[0], x.shape[1], -1)  
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         # import pdb;pdb.set_trace()
@@ -729,20 +631,11 @@ class VisionTransformer(nn.Module):
         # alpha_flattened = alpha_resized.flatten(start_dim=2).permute(0, 2, 1) 
         alpha_resized = alpha_resized.squeeze(1)
         # x[:, 1:] += self.depth_positional_embedding.to(x.dtype) * alpha_flattened
-        # import pdb;pdb.set_trace()
         # if pos_embed == "fourier":
         #     depth_embedding = self.depth_positional_embedding(alpha_resized)
         #     x[:, 1:] +=self.depth_mlp(depth_embedding)
-        # elif pos_embed == "sine":
-        #     depth_embedding = self.sine_positional_embedding(alpha_resized)
-        #     x[:, 1:] +=self.depth_mlp(depth_embedding)
-        # elif pos_embed == "3d":
-        #     depth_embedding = self.depth_positional_embedding.positiontrans3d(alpha_resized)
-        #     x[:, 1:] +=self.depth_mlp(depth_embedding)
-        
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
-        # import pdb;pdb.set_trace()
         x = x.permute(1, 0, 2)  # NLD -> LND
         if return_attn:
             x, attn_last = self.transformer(x, return_attn=True,depth=alpha_resized)
@@ -758,7 +651,6 @@ class VisionTransformer(nn.Module):
             return x, attn_last
         else:
             return x
-# /////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class CLIP(nn.Module):
     def __init__(self,
