@@ -9,8 +9,7 @@ import loralib as lora
 import math
 import collections
 import torch.nn.init as init
-import spconv.pytorch as spconv
-
+import spconv
 class CPEconv(nn.Module):
     def __init__(self, in_channels, spatial_shape, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
         super(CPEconv, self).__init__()

@@ -15,3 +15,7 @@ torch
 torchvision
 transformers
 wandb
+Pillow
+loralib
+spconv
+ftfy
